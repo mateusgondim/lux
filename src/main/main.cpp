@@ -22,6 +22,7 @@
 #include "core/shape.h"
 #include "core/error.h"
 #include "core/filter.h"
+#include "core/scene.h"
 
 #include "materials/lambertian.h"
 #include "materials/mirror.h"
@@ -39,9 +40,6 @@ struct rgb {
   int b;
 };
 
-std::vector<lux::Shape *> shapes;
-std::vector<lux::Shape *> lights;
-
 const unsigned kmax_depth = 5; 
 const bool g_direct_light_only = false;
 
@@ -56,22 +54,11 @@ lux::RGB_spectrum skybox(const lux::Ray & r)
   return lux::lerp(t, s0, s1);
 }
 
-
-bool intersect_p(const lux::Ray & ray, std::vector<lux::Shape*> & shapes)
-{
-  std::vector<lux::Shape*>::const_iterator iter = shapes.cbegin();
-  for(; iter != shapes.cend(); ++iter) {
-    if ((*iter)->intersect_p(ray)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-lux::RGB_spectrum estimate_direct(const lux::Surface_interaction & interaction, 
-                                        const lux::Vec2 & scattering_sample,
-                                        const lux::Shape & light,
-                                        const lux::Vec2 & light_sample)
+lux::RGB_spectrum estimate_direct(const lux::Scene & scene,
+                                  const lux::Surface_interaction & interaction,
+                                  const lux::Vec2 & scattering_sample,
+                                  const lux::Shape & light,
+                                  const lux::Vec2 & light_sample)
 {
 
   lux::RGB_spectrum Ld(0.0f);
@@ -79,7 +66,6 @@ lux::RGB_spectrum estimate_direct(const lux::Surface_interaction & interaction,
   lux::Vec3 wi_world;
   float light_pdf;
   float scattering_pdf;
-  //lux::Visibility_tester visibility_tester;
   lux::Vec3 point_on_light;
   lux::RGB_spectrum Li(0.0f);
   Li = light.sample_li(interaction, light_sample, &wi_world, &point_on_light, &light_pdf);
@@ -97,8 +83,8 @@ lux::RGB_spectrum estimate_direct(const lux::Surface_interaction & interaction,
       lux::Ray shadow_ray(interaction.hit_point, lux::normalize(d),
                                 lux::magnitude(d) - lux::kshadow_epsilon);
 
-      const bool isOccluded = intersect_p(shadow_ray, shapes); 
-      if (!isOccluded) {
+      const bool is_occluded = scene.intersect_p(shadow_ray);
+      if (!is_occluded) {
         const float kweight = lux::power_heuristic(1, light_pdf, 1, scattering_pdf);
         Ld += f * Li * kweight / light_pdf;
       }
@@ -126,7 +112,7 @@ lux::RGB_spectrum estimate_direct(const lux::Surface_interaction & interaction,
     // Check if the ray intersects the light source
     lux::Surface_interaction light_interaction;
     lux::Ray r(interaction.hit_point, wi_world);
-    bool found_intersection = intersect(r, &light_interaction, shapes);
+    bool found_intersection = scene.intersect(r, &light_interaction);
     if (!found_intersection) return Ld;
     if (&light != light_interaction.pshape) return Ld;
     lux::RGB_spectrum Li = light.le(light_interaction, -wi_world);
@@ -136,36 +122,25 @@ lux::RGB_spectrum estimate_direct(const lux::Surface_interaction & interaction,
   return Ld;
 }
 
-lux::RGB_spectrum uniform_sample_one_light(const lux::Surface_interaction & interaction, 
-                                                 lux::Sampler & sampler)
+lux::RGB_spectrum uniform_sample_one_light(const lux::Scene & scene,
+                                           const lux::Surface_interaction & interaction,
+                                           lux::Sampler & sampler)
 {
   // Randomly choose a light to sample
+  const std::vector<std::shared_ptr<lux::Shape>> & lights = scene.get_lights();
   unsigned num_lights = lights.size();
   if (num_lights == 0) return lux::RGB_spectrum(0.0f);
   unsigned light_index = std::min(static_cast<unsigned>(sampler.get_1D() * num_lights),
                                   num_lights - 1);
-  const lux::Shape * plight = lights[light_index];
+  const std::shared_ptr<lux::Shape> plight = lights[light_index];
 
   lux::Vec2 light_sample(sampler.get_2D());
   lux::Vec2 scattering_sample(sampler.get_2D());
 
-  return num_lights * estimate_direct(interaction, scattering_sample, *plight, light_sample);
+  return num_lights * estimate_direct(scene, interaction, scattering_sample, *plight, light_sample);
 }
 
-bool intersect(const lux::Ray & ray, lux::Surface_interaction * psurface_interaction,
-               std::vector<lux::Shape*> & shapes)
-{
-  float hit_parameter = 0.0f;
-  std::vector<lux::Shape*>::const_iterator iter = shapes.cbegin();
-  for(; iter != shapes.cend(); ++iter) {
-    if ((*iter)->intersect(ray, &hit_parameter, psurface_interaction)) {
-      ray.set_t_max(hit_parameter);
-    }
-  }
-  return (hit_parameter > 0.0f) ? true : false;
-}
-
-lux::RGB_spectrum trace(const lux::Ray & r, lux::Sampler & sampler)
+lux::RGB_spectrum trace(const lux::Scene & scene, const lux::Ray & r, lux::Sampler & sampler)
 {
   lux::RGB_spectrum L(0.0f);
   lux::RGB_spectrum beta(1.0f);
@@ -174,7 +149,7 @@ lux::RGB_spectrum trace(const lux::Ray & r, lux::Sampler & sampler)
   lux::Material_type material_type = lux::Material_type::kdiffuse;
   for (unsigned bounces = 0; bounces != kmax_depth ; ++bounces) {
     lux::Surface_interaction surface_interaction;
-    bool found_intersection = intersect(ray, &surface_interaction, shapes);
+    bool found_intersection = scene.intersect(ray, &surface_interaction);
     if (!found_intersection) {
       // skybox accounts for a ambient radiance
       //L += beta * skybox(ray);
@@ -190,7 +165,7 @@ lux::RGB_spectrum trace(const lux::Ray & r, lux::Sampler & sampler)
     surface_interaction.pmaterial->init_shading_space(surface_interaction);
 
     // Compute estimate of direct lighting on current vertex 
-    L += beta * uniform_sample_one_light(surface_interaction, sampler);
+    L += beta * uniform_sample_one_light(scene, surface_interaction, sampler);
 
     lux::Vec3 wo_world = -ray.get_direction(), wi_world;
     float pdf;
@@ -239,50 +214,51 @@ int main(int argc, char * argv[])
     lux::Vec3(khalf_box_width, 0.0f, khalf_box_width)
   };
 
+  lux::Scene scene;
   // floor
   lux::RGB_spectrum kblack(0.0f);
-  shapes.push_back(new lux::Triangle(lux::Transform(), lambertian_white,
-                                           kblack, kfloor[0], kfloor[1], kfloor[2]));
-  shapes.push_back(new lux::Triangle(lux::Transform(), lambertian_white,
-                                           kblack, kfloor[2], kfloor[3], kfloor[0]));
+  scene.add_shape(std::make_shared<lux::Triangle>(lux::Transform(), lambertian_white, kblack,
+                                     kfloor[0], kfloor[1], kfloor[2]));
+  scene.add_shape(std::make_shared<lux::Triangle>(lux::Transform(), lambertian_white, kblack,
+                                     kfloor[2], kfloor[3], kfloor[0]));
   // top
   lux::Vec3 delta(0, kbox_width, 0.0f);
   lux::Transform R = lux::rotate_x(180.0f);
   lux::Transform T = lux::translate(delta);
   lux::Transform obj_to_world = R * T;
-  shapes.push_back(new lux::Triangle(obj_to_world, lambertian_white,
-                                           kblack, kfloor[0], kfloor[1], kfloor[2]));
-  shapes.push_back(new lux::Triangle(obj_to_world, lambertian_white,
-                                           kblack, kfloor[2], kfloor[3], kfloor[0]));
+  scene.add_shape(std::make_shared<lux::Triangle>(obj_to_world, lambertian_white, kblack,
+                    kfloor[0], kfloor[1], kfloor[2]));
+  scene.add_shape(std::make_shared<lux::Triangle>(obj_to_world, lambertian_white, kblack,
+                                     kfloor[2], kfloor[3], kfloor[0]));
 
   // left
   delta = lux::Vec3(-khalf_box_width, khalf_box_width, 0.0f);
   R = lux::rotate_z(-90.0f);
   T = lux::translate(delta);
   obj_to_world = R * T;
-  shapes.push_back(new lux::Triangle(obj_to_world, lambertian_red,
-                                           kblack, kfloor[0], kfloor[1], kfloor[2]));
-  shapes.push_back(new lux::Triangle(obj_to_world, lambertian_red,
-                                           kblack, kfloor[2], kfloor[3], kfloor[0]));
+  scene.add_shape(std::make_shared<lux::Triangle>(obj_to_world, lambertian_red, kblack,
+                    kfloor[0], kfloor[1], kfloor[2]));
+  scene.add_shape(std::make_shared<lux::Triangle>(obj_to_world, lambertian_red, kblack,
+                                     kfloor[2], kfloor[3], kfloor[0]));
   // right
   delta = lux::Vec3(khalf_box_width, khalf_box_width, 0.0f);
   R = lux::rotate_z(90.0f);
   T = lux::translate(delta);
   obj_to_world = R * T;
-  shapes.push_back(new lux::Triangle(obj_to_world, lambertian_blue, kblack,
-                                           kfloor[0], kfloor[1], kfloor[2]));
-  shapes.push_back(new lux::Triangle(obj_to_world, lambertian_blue, kblack,
-                                           kfloor[2], kfloor[3], kfloor[0]));
+  scene.add_shape(std::make_shared<lux::Triangle>(obj_to_world, lambertian_blue, kblack,
+                    kfloor[0], kfloor[1], kfloor[2]));
+  scene.add_shape(std::make_shared<lux::Triangle>(obj_to_world, lambertian_blue, kblack,
+                                     kfloor[2], kfloor[3], kfloor[0]));
 
   // back
   delta = lux::Vec3(0.0f, khalf_box_width, khalf_box_width);
   R = lux::rotate_x(-90.0f);
   T = lux::translate(delta);
   obj_to_world = R * T;
-  shapes.push_back(new lux::Triangle(obj_to_world, lambertian_white, kblack,
-                                           kfloor[0], kfloor[1], kfloor[2]));
-  shapes.push_back(new lux::Triangle(obj_to_world, lambertian_white, kblack,
-                                           kfloor[2], kfloor[3], kfloor[0]));
+  scene.add_shape(std::make_shared<lux::Triangle>(obj_to_world, lambertian_white, kblack,
+                    kfloor[0], kfloor[1], kfloor[2]));
+  scene.add_shape(std::make_shared<lux::Triangle>(obj_to_world, lambertian_white, kblack,
+                                     kfloor[2], kfloor[3], kfloor[0]));
 
   const float kradius = 0.7f;
   const float klight_radius = 0.18f;
@@ -292,14 +268,11 @@ int main(int argc, char * argv[])
 
   lambertian = std::make_shared<lux::Lambertian>(lux::RGB_spectrum(1.0f));
 
-  lux::Shape *plight = new lux::Sphere(lux::translate(light_sphere_pos),
-                                                   lambertian, lux::RGB_spectrum(115.0f), klight_radius);
-
-  lights.push_back(plight);
-  shapes.push_back(plight);
-  shapes.push_back(new lux::Sphere(lux::translate(sphere_pos),lambertian, kblack, kradius));
-  shapes.push_back(new lux::Sphere(lux::translate(lux::Vec3(-0.8f, kradius, khalf_box_width * 0.5f)),
-                                         mirror, kblack, kradius));
+  scene.add_shape(std::make_shared<lux::Sphere>(lux::translate(light_sphere_pos), lambertian,
+                                                lux::RGB_spectrum(115.0f), klight_radius));
+  scene.add_shape(std::make_shared<lux::Sphere>(lux::translate(sphere_pos),lambertian, kblack, kradius));
+  scene.add_shape(std::make_shared<lux::Sphere>(lux::translate(lux::Vec3(-0.8f, kradius, khalf_box_width * 0.5f)),
+                                   mirror, kblack, kradius));
   
 
   // Set up image to render
@@ -351,7 +324,7 @@ int main(int argc, char * argv[])
 
         ray = cam.generate_ray(camera_sample);
 
-        sample_color = lux::clamp(trace(ray, monte_carlo_sampler));
+        sample_color = lux::clamp(trace(scene, ray, monte_carlo_sampler));
         pixel_color += sample_color * kinv_samples_per_pixel; 
 
         monte_carlo_sampler.start_next_sample();
