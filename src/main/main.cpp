@@ -79,7 +79,6 @@ lux::RGB_spectrum estimate_direct(const lux::Surface_interaction & interaction,
   lux::Vec3 wi_world;
   float light_pdf;
   float scattering_pdf;
-  //lux::Visibility_tester visibility_tester;
   lux::Vec3 point_on_light;
   lux::RGB_spectrum Li(0.0f);
   Li = light.sample_li(interaction, light_sample, &wi_world, &point_on_light, &light_pdf);
