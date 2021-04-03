@@ -8,6 +8,7 @@ namespace lux { class Scene; class Ray; }
 namespace lux {
   class Integrator {
     public:
+      Integrator() = default;
       virtual ~Integrator() {}
 
       virtual RGB_spectrum li(const Scene & scene, const Ray & ray) = 0;
