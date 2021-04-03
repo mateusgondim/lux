@@ -83,8 +83,8 @@ lux::RGB_spectrum estimate_direct(const lux::Scene & scene,
       lux::Ray shadow_ray(interaction.hit_point, lux::normalize(d),
                                 lux::magnitude(d) - lux::kshadow_epsilon);
 
-      const bool isOccluded = scene.intersect_p(shadow_ray);
-      if (!isOccluded) {
+      const bool is_occluded = scene.intersect_p(shadow_ray);
+      if (!is_occluded) {
         const float kweight = lux::power_heuristic(1, light_pdf, 1, scattering_pdf);
         Ld += f * Li * kweight / light_pdf;
       }
