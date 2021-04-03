@@ -23,6 +23,7 @@
 #include "core/error.h"
 #include "core/filter.h"
 #include "core/scene.h"
+#include "core/integrator.h"
 
 #include "materials/lambertian.h"
 #include "materials/mirror.h"
@@ -54,92 +55,6 @@ lux::RGB_spectrum skybox(const lux::Ray & r)
   return lux::lerp(t, s0, s1);
 }
 
-lux::RGB_spectrum estimate_direct(const lux::Scene & scene,
-                                  const lux::Surface_interaction & interaction,
-                                  const lux::Vec2 & scattering_sample,
-                                  const lux::Shape & light,
-                                  const lux::Vec2 & light_sample)
-{
-
-  lux::RGB_spectrum Ld(0.0f);
-  // Sample light source
-  lux::Vec3 wi_world;
-  float light_pdf;
-  float scattering_pdf;
-  lux::Vec3 point_on_light;
-  lux::RGB_spectrum Li(0.0f);
-  Li = light.sample_li(interaction, light_sample, &wi_world, &point_on_light, &light_pdf);
-  bool reflect = dot(wi_world, interaction.n) * dot(interaction.wo_world, interaction.n) > 0;
-  if (light_pdf > 0.0f && !Li.is_black() && reflect) {
-    // Evaluate BRDF for the light sampling strategy
-    lux::RGB_spectrum f(0.0f);
-    f = interaction.pmaterial->f(interaction.wo_world, wi_world) * abs_dot(wi_world, interaction.n);
-    scattering_pdf = interaction.pmaterial->PDF(interaction.wo_world, wi_world);
-
-    // Only if some of the incident light Li reflects back in the direction wo, 
-    // should we follow through
-    if (!f.is_black()) {
-      const lux::Vec3 d = point_on_light - interaction.hit_point;
-      lux::Ray shadow_ray(interaction.hit_point, lux::normalize(d),
-                                lux::magnitude(d) - lux::kshadow_epsilon);
-
-      const bool is_occluded = scene.intersect_p(shadow_ray);
-      if (!is_occluded) {
-        const float kweight = lux::power_heuristic(1, light_pdf, 1, scattering_pdf);
-        Ld += f * Li * kweight / light_pdf;
-      }
-    }
-  }
-
-  // Sample the BRDF
-  lux::RGB_spectrum f(0.0f);
-  f = interaction.pmaterial->sample_f(interaction.wo_world, &wi_world, scattering_sample,
-      &scattering_pdf); 
-
-  f *= lux::abs_dot(wi_world, interaction.n);
-
-  if (!f.is_black() && scattering_pdf > 0.0f) {
-    float weight = 1.0f;
-    lux::Material_type material_type = interaction.pmaterial->get_type();
-
-    // This block should only be used if the surface is NOT specular!
-    if (material_type != lux::Material_type::kspecular) {
-      light_pdf = light.PDF(interaction, wi_world);
-      if (light_pdf == 0.0f) return Ld;
-      weight = lux::power_heuristic(1, scattering_pdf, 1, light_pdf);
-    }
-
-    // Check if the ray intersects the light source
-    lux::Surface_interaction light_interaction;
-    lux::Ray r(interaction.hit_point, wi_world);
-    bool found_intersection = scene.intersect(r, &light_interaction);
-    if (!found_intersection) return Ld;
-    if (&light != light_interaction.pshape) return Ld;
-    lux::RGB_spectrum Li = light.le(light_interaction, -wi_world);
-    if (!Li.is_black()) Ld += f * Li * weight / scattering_pdf;
-  }
-
-  return Ld;
-}
-
-lux::RGB_spectrum uniform_sample_one_light(const lux::Scene & scene,
-                                           const lux::Surface_interaction & interaction,
-                                           lux::Sampler & sampler)
-{
-  // Randomly choose a light to sample
-  const std::vector<std::shared_ptr<lux::Shape>> & lights = scene.get_lights();
-  unsigned num_lights = lights.size();
-  if (num_lights == 0) return lux::RGB_spectrum(0.0f);
-  unsigned light_index = std::min(static_cast<unsigned>(sampler.get_1D() * num_lights),
-                                  num_lights - 1);
-  const std::shared_ptr<lux::Shape> plight = lights[light_index];
-
-  lux::Vec2 light_sample(sampler.get_2D());
-  lux::Vec2 scattering_sample(sampler.get_2D());
-
-  return num_lights * estimate_direct(scene, interaction, scattering_sample, *plight, light_sample);
-}
-
 lux::RGB_spectrum trace(const lux::Scene & scene, const lux::Ray & r, lux::Sampler & sampler)
 {
   lux::RGB_spectrum L(0.0f);
@@ -165,7 +80,7 @@ lux::RGB_spectrum trace(const lux::Scene & scene, const lux::Ray & r, lux::Sampl
     surface_interaction.pmaterial->init_shading_space(surface_interaction);
 
     // Compute estimate of direct lighting on current vertex 
-    L += beta * uniform_sample_one_light(scene, surface_interaction, sampler);
+    L += beta * lux::uniform_sample_one_light(scene, surface_interaction, sampler);
 
     lux::Vec3 wo_world = -ray.get_direction(), wi_world;
     float pdf;
