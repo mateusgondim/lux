@@ -26,9 +26,9 @@ namespace lux {
     }
   }
 
-  void Pixel_sampler::start_pixel(const int x, const int y) {
+  void Pixel_sampler::start_pixel() {
     m_current_1D_dimension = m_current_2D_dimension = 0;
-    Sampler::start_pixel(x, y);
+    Sampler::start_pixel();
   }
 
   bool Pixel_sampler::start_next_sample() {
