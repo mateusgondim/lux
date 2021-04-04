@@ -10,6 +10,8 @@ namespace lux {
     public:
       Sampler(const std::uint64_t samples_per_pixel);
 
+      virtual ~Sampler() {}
+
       virtual void start_pixel(const int x, const int y);
       virtual bool start_next_sample();
 
