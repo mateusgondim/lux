@@ -176,7 +176,7 @@ int main(int argc, char * argv[])
   lux::Camera_sample camera_sample;
   for (unsigned h = 0; h != resolution.y; ++h) {
     for (unsigned w = 0; w != resolution.x; ++w) {
-      stratified_sampler.start_pixel(w, h);
+      stratified_sampler.start_pixel();
       lux::RGB_spectrum pixel_color;
       lux::RGB_spectrum sample_color;
 
