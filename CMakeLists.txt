@@ -12,6 +12,7 @@ set(core_dir src/core)
 set(shapes_dir src/shapes)
 set(materials_dir src/materials)
 set(samplers_dir src/samplers)
+set(integrators_dir src/integrators)
 
 if(DEBUG_BUILD)
   add_definitions(-DASSERTIONS_ENABLED)
@@ -26,7 +27,8 @@ set(source_files ${main_dir}/main.cpp ${core_dir}/camera.cpp ${shapes_dir}/trian
                  ${samplers_dir}/random.cpp  ${core_dir}/vec2.cpp ${core_dir}/filter.cpp
                  ${core_dir}/vec3.cpp ${core_dir}/transform.cpp ${samplers_dir}/stratified.cpp
                  ${core_dir}/rgb_spectrum.cpp ${core_dir}/material.cpp ${core_dir}/integrator.cpp
-                 ${core_dir}/scene.cpp ${materials_dir}/mirror.cpp)
+                 ${core_dir}/scene.cpp ${materials_dir}/mirror.cpp
+                 ${integrators_dir}/path_tracer.cpp)
 
 set(include_files ${core_dir}/vec2.h ${core_dir}/vec3.h ${core_dir}/ray.h ${core_dir}/mat4.h
                   ${core_dir}/math.h ${core_dir}/shape.h ${shapes_dir}/sphere.h
@@ -36,7 +38,7 @@ set(include_files ${core_dir}/vec2.h ${core_dir}/vec3.h ${core_dir}/ray.h ${core
                   ${core_dir}/util.h ${core_dir}/transform.h ${core_dir}/material.h
                   ${materials_dir}/lambertian.h ${core_dir}/rgb_spectrum.h
                   ${materials_dir}/mirror.h ${core_dir}/scene.h ${core_dir}/integrator.h
-                  ${main_dir}/main.h)
+                  ${integrators_dir}/path_tracer.h)
 
 
 add_executable(lux ${include_files} ${source_files})
