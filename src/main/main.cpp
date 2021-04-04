@@ -34,13 +34,6 @@
 
 #include "integrators/path_tracer.h"
 
-
-struct rgb {
-  int r;
-  int g;
-  int b;
-};
-
 const unsigned g_kmax_depth = 5;
 const bool g_direct_light_only = false;
 
@@ -147,7 +140,7 @@ int main(int argc, char * argv[])
   //std::cout << cam_to_world << std::endl;
   lux::Vec2 resolution(600, 600);
   lux::Camera cam(resolution, cam_to_world, kfov);
-  rgb rendered_image[static_cast<int>(resolution.x)][static_cast<int>(resolution.y)];
+  lux::RGB_spectrum rendered_image[static_cast<int>(resolution.x)][static_cast<int>(resolution.y)];
 
   lux::Ray ray;
 
@@ -193,10 +186,8 @@ int main(int argc, char * argv[])
         sample_color = lux::clamp(path_tracer.li(scene, ray));
         pixel_color += sample_color * kinv_samples_per_pixel; 
       } while (stratified_sampler.start_next_sample());
-      
-      rendered_image[w][h].r = static_cast<int>(sqrt(pixel_color[0]) * 255.9f);
-      rendered_image[w][h].g = static_cast<int>(sqrt(pixel_color[1]) * 255.9f);
-      rendered_image[w][h].b = static_cast<int>(sqrt(pixel_color[2]) * 255.9f);
+
+      rendered_image[w][h] = pixel_color;
 
       int pixels_written = h * resolution.x + w + 1;
       float remaining = static_cast<float>(pixels_written * 100) / num_pixels;
@@ -218,9 +209,9 @@ int main(int argc, char * argv[])
        << "\n255\n";
   for (unsigned h = 0; h != resolution.y; ++h) {
     for (unsigned w = 0; w != resolution.x; ++w) {
-      file << rendered_image[w][h].r << " "
-           << rendered_image[w][h].g << " "
-           << rendered_image[w][h].b << '\n';
+      file << static_cast<int>(sqrt(rendered_image[w][h][0]) * 255.9f) << " "
+           << static_cast<int>(sqrt(rendered_image[w][h][1]) * 255.9f) << " "
+           << static_cast<int>(sqrt(rendered_image[w][h][2]) * 255.9f) << '\n';
     }
   }
 
