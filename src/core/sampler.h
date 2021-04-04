@@ -5,7 +5,6 @@
 
 #include "core/vec2.h"
 
-// TODO: See if it's necessary to create a Vec2 with ints
 namespace lux {
   class Sampler {
     public:
