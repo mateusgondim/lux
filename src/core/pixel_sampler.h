@@ -13,7 +13,7 @@ namespace lux {
   class Pixel_sampler : public Sampler {
     public:
       Pixel_sampler(const std::uint64_t samples_per_pixel, const unsigned dimensions_per_sample);
-      virtual void start_pixel(const int x, const int y) override;
+      virtual void start_pixel() override;
       virtual bool start_next_sample() override;
 
       virtual float get_1D() override;

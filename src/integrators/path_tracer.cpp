@@ -10,7 +10,7 @@ namespace lux {
   Path_tracer::Path_tracer(Sampler * psampler, unsigned max_depth)
     : m_psampler(psampler), m_kmax_depth(max_depth)
   {
-    psampler -> start_pixel(0, 0);
+    psampler -> start_pixel();
   }
 
   RGB_spectrum Path_tracer::li(const Scene & scene, const Ray & r)
@@ -56,7 +56,7 @@ namespace lux {
       }
     }
 
-    if(!m_psampler->start_next_sample()) m_psampler->start_pixel(0, 0);
+    if(!m_psampler->start_next_sample()) m_psampler->start_pixel();
 
     return L;
   }

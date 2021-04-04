@@ -14,7 +14,7 @@ namespace lux {
         m_y_pixel_samples(y_pixel_samples),
         m_jittered_samples(jittered_samples) {}
 
-  void Stratified_sampler::start_pixel(const int x, const int y)
+  void Stratified_sampler::start_pixel()
   {
     for (unsigned i = 0; i != m_samples_1D.size(); ++i) {
       stratify_1D_samples(&m_samples_1D[i][0]);
@@ -26,7 +26,7 @@ namespace lux {
       shuffle(&m_samples_2D[i][0], m_x_pixel_samples * m_y_pixel_samples, m_rng);
     }
 
-    Pixel_sampler::start_pixel(x, y);
+    Pixel_sampler::start_pixel();
   }
 
   void Stratified_sampler::stratify_1D_samples(float * samples_1D)

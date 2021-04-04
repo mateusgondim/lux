@@ -11,7 +11,7 @@ namespace lux {
       Stratified_sampler(const unsigned x_pixel_samples, const unsigned y_pixel_samples,
                          const unsigned dimensions_per_sample, const bool jittered_samples);
 
-      virtual void start_pixel(const int x, const int y) override;
+      virtual void start_pixel() override;
 
     private:
       void stratify_1D_samples(float * samples_1D);

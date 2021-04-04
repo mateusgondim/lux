@@ -12,7 +12,7 @@ namespace lux {
 
       virtual ~Sampler() {}
 
-      virtual void start_pixel(const int x, const int y);
+      virtual void start_pixel();
       virtual bool start_next_sample();
 
       virtual float get_1D() = 0;
