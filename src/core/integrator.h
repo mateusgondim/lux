@@ -18,7 +18,7 @@ namespace lux {
       Integrator() = default;
       virtual ~Integrator() {}
 
-      virtual RGB_spectrum li(const Scene & scene, const Ray & ray) = 0;
+      virtual RGB_spectrum li(const Scene & scene, const Ray & r) = 0;
   };
 
   RGB_spectrum uniform_sample_one_light(const Scene & scene,
