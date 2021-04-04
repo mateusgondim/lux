@@ -5,11 +5,12 @@
 
 #include "core/vec2.h"
 
-// TODO: See if it's necessary to create a Vec2 with ints
 namespace lux {
   class Sampler {
     public:
       Sampler(const std::uint64_t samples_per_pixel);
+
+      virtual ~Sampler() {}
 
       virtual void start_pixel(const int x, const int y);
       virtual bool start_next_sample();

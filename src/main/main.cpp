@@ -1,5 +1,3 @@
-#include "main/main.h"
-
 #include <cmath>
 #include <cstdint>
 
@@ -34,6 +32,8 @@
 #include "samplers/random.h"
 #include "samplers/stratified.h"
 
+#include "integrators/path_tracer.h"
+
 
 struct rgb {
   int r;
@@ -41,7 +41,7 @@ struct rgb {
   int b;
 };
 
-const unsigned kmax_depth = 5; 
+const unsigned g_kmax_depth = 5;
 const bool g_direct_light_only = false;
 
 lux::RGB_spectrum skybox(const lux::Ray & r)
@@ -53,57 +53,6 @@ lux::RGB_spectrum skybox(const lux::Ray & r)
   const lux::RGB_spectrum s1(0.5f, 0.7f, 1.0f);
 
   return lux::lerp(t, s0, s1);
-}
-
-lux::RGB_spectrum trace(const lux::Scene & scene, const lux::Ray & r, lux::Sampler & sampler)
-{
-  lux::RGB_spectrum L(0.0f);
-  lux::RGB_spectrum beta(1.0f);
-  lux::Ray ray(r);
-
-  lux::Material_type material_type = lux::Material_type::kdiffuse;
-  for (unsigned bounces = 0; bounces != kmax_depth ; ++bounces) {
-    lux::Surface_interaction surface_interaction;
-    bool found_intersection = scene.intersect(ray, &surface_interaction);
-    if (!found_intersection) {
-      // skybox accounts for a ambient radiance
-      //L += beta * skybox(ray);
-      break;
-    }
-
-    // Acount for the first intersection to be with a emissive surface 
-    if (bounces == 0 || material_type == lux::Material_type::kspecular) {
-      L += beta * surface_interaction.pshape->le(surface_interaction, -ray.get_direction());
-     }
-
-    // Initialize Materials' shading space
-    surface_interaction.pmaterial->init_shading_space(surface_interaction);
-
-    // Compute estimate of direct lighting on current vertex 
-    L += beta * lux::uniform_sample_one_light(scene, surface_interaction, sampler);
-
-    lux::Vec3 wo_world = -ray.get_direction(), wi_world;
-    float pdf;
-    lux::RGB_spectrum f = surface_interaction.pmaterial->sample_f(wo_world, &wi_world,
-                                                                        sampler.get_2D(), &pdf);
-
-    // Check if this condition makes sense for light! do lights scatter light?
-    if (f.is_black() || pdf == 0.0f) {
-      break;
-    }
-    beta *= f * lux::abs_dot(wi_world, surface_interaction.n) / pdf;
-    ray = lux::Ray(surface_interaction.hit_point, lux::normalize(wi_world));
-
-    material_type = surface_interaction.pmaterial->get_type();
-    // Russian Roullete
-    if (bounces > 3) {
-      //std::cout << "Exit at bounce = " << bounces;
-      const float q = std::max(0.05f, 1 - beta.y());
-      if (sampler.get_1D() < q) break;
-      beta /= 1 - q;
-    }
-  }
-  return L;
 }
 
 int main(int argc, char * argv[])
@@ -211,12 +160,15 @@ int main(int argc, char * argv[])
   const float kinv_samples_per_pixel = 1.0f / static_cast<float>(ksamples_per_pixel);
 
   lux::Stratified_sampler stratified_sampler(ksamples_x, ksamples_y, 2, true);
-  lux::Stratified_sampler monte_carlo_sampler(ksamples_x, ksamples_y, kmax_depth * 3, true);
+
+  lux::Sampler *pintegrator_sampler = new lux::Stratified_sampler(ksamples_x, ksamples_y,
+                                                                  g_kmax_depth * 3, true);
+
+  lux::Path_tracer path_tracer(pintegrator_sampler, g_kmax_depth);
 
   const int num_pixels = resolution.x * resolution.y;
   std::string progress_bar("\r[");
   progress_bar += std::string(100, '-') + "]";
-
    
   float prev = 0.0f;
 
@@ -225,7 +177,6 @@ int main(int argc, char * argv[])
   for (unsigned h = 0; h != resolution.y; ++h) {
     for (unsigned w = 0; w != resolution.x; ++w) {
       stratified_sampler.start_pixel(w, h);
-      monte_carlo_sampler.start_pixel(w,h);
       lux::RGB_spectrum pixel_color;
       lux::RGB_spectrum sample_color;
 
@@ -239,10 +190,8 @@ int main(int argc, char * argv[])
 
         ray = cam.generate_ray(camera_sample);
 
-        sample_color = lux::clamp(trace(scene, ray, monte_carlo_sampler));
+        sample_color = lux::clamp(path_tracer.li(scene, ray));
         pixel_color += sample_color * kinv_samples_per_pixel; 
-
-        monte_carlo_sampler.start_next_sample();
       } while (stratified_sampler.start_next_sample());
       
       rendered_image[w][h].r = static_cast<int>(sqrt(pixel_color[0]) * 255.9f);
