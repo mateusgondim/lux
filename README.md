@@ -2,7 +2,7 @@
 
 # The Lux Renderer #
 
-lux is a global Illumination renderer, that uses Monte Carlo path tracing to generate physically based images.
+lux is a global Illumination renderer that uses Monte Carlo path tracing to generate physically based images.
 
 
 ## Motivation ##
